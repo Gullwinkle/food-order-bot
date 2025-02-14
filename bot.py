@@ -75,44 +75,8 @@ def handle_inline_buttons(call):
         send_soup_info(call.message.chat.id)
     elif call.data == "cart":
         send_cart(call.message.chat.id)
-    elif call.data == "back":
-        send_menu(call.message.chat.id)
-
-
-def send_soup_info(chat_id):
-    inline_keyboard = InlineKeyboardMarkup()
-    btn_prev = InlineKeyboardButton("Пред.", callback_data="prev_soup")
-    btn_next = InlineKeyboardButton("След.", callback_data="next_soup")
-    btn_add = InlineKeyboardButton("Добавить в заказ", callback_data="add_soup")
-    btn_cart = InlineKeyboardButton("Корзина", callback_data="cart")
-    btn_back = InlineKeyboardButton("Назад", callback_data="back")
-    inline_keyboard.row(btn_prev, btn_next)
-    inline_keyboard.row(btn_add)
-    inline_keyboard.row(btn_cart)
-    inline_keyboard.row(btn_back)
-
-    soup = soups[current_soup_index]
-    text = f"{soup['name']} - {soup['price']} руб."
-    bot.send_photo(chat_id, soup['photo'], caption=text, reply_markup=inline_keyboard)
-
-
-def send_cart(chat_id):
-    if not order["items"]:
-        bot.send_message(chat_id, "Ваша корзина пуста.")
-        return
-
-    cart_text = "Ваш заказ:\n"
-    for item in order["items"]:
-        cart_text += f"{item['name']} - {item['price']} руб.\n"
-    cart_text += f"\nИтого: {order['total_price']} руб."
-
-    inline_keyboard = InlineKeyboardMarkup()
-    btn_confirm = InlineKeyboardButton("Подтвердить заказ", callback_data="confirm_order")
-    btn_back = InlineKeyboardButton("Назад", callback_data="soups")
-    inline_keyboard.row(btn_confirm)
-    inline_keyboard.row(btn_back)
-
-    bot.send_message(chat_id, cart_text, reply_markup=inline_keyboard)
+    elif call.data == "back_to_start":
+        handle_start(call.message)
 
 
 def send_restaurant_info(chat_id):
@@ -120,7 +84,7 @@ def send_restaurant_info(chat_id):
     btn_prev = InlineKeyboardButton("Пред.", callback_data="prev_restaurant")
     btn_next = InlineKeyboardButton("След.", callback_data="next_restaurant")
     btn_select = InlineKeyboardButton("Выбрать", callback_data="select_restaurant")
-    btn_back = InlineKeyboardButton("Назад", callback_data="back")
+    btn_back = InlineKeyboardButton("Назад", callback_data="back_to_start")
     inline_keyboard.row(btn_prev, btn_next)
     inline_keyboard.row(btn_select)
     inline_keyboard.row(btn_back)
@@ -140,6 +104,37 @@ def send_menu(chat_id):
     inline_keyboard.row(btn_back)
     bot.send_photo(chat_id, restaurants[current_index]["logo"], caption=restaurants[current_index]["name"],
                    reply_markup=inline_keyboard)
+
+
+def send_soup_info(chat_id):
+    inline_keyboard = InlineKeyboardMarkup()
+    btn_prev = InlineKeyboardButton("Пред.", callback_data="prev_soup")
+    btn_next = InlineKeyboardButton("След.", callback_data="next_soup")
+    btn_add = InlineKeyboardButton("Добавить в заказ", callback_data="add_soup")
+    btn_cart = InlineKeyboardButton("Корзина", callback_data="cart")
+    btn_back = InlineKeyboardButton("Назад", callback_data="select_restaurant")
+    inline_keyboard.row(btn_prev, btn_next)
+    inline_keyboard.row(btn_add)
+    inline_keyboard.row(btn_cart, btn_back)
+    bot.send_photo(chat_id, soups[current_soup_index]["photo"],
+                   caption=f"{soups[current_soup_index]['name']} - {soups[current_soup_index]['price']} руб.",
+                   reply_markup=inline_keyboard)
+
+
+def send_cart(chat_id):
+    if not order["items"]:
+        bot.send_message(chat_id, "Ваша корзина пуста.")
+        return
+    text = "Ваш заказ:\n"
+    for item in order["items"]:
+        text += f"{item['name']} - {item['price']} руб.\n"
+    text += f"\nОбщая стоимость: {order['total_price']} руб."
+    inline_keyboard = InlineKeyboardMarkup()
+    btn_confirm = InlineKeyboardButton("Подтвердить заказ", callback_data="confirm_order")
+    btn_back = InlineKeyboardButton("Назад", callback_data="soups")
+    inline_keyboard.row(btn_confirm)
+    inline_keyboard.row(btn_back)
+    bot.send_message(chat_id, text, reply_markup=inline_keyboard)
 
 
 bot.polling(none_stop=True)
