@@ -16,8 +16,6 @@ dishes = {}
 current_index = 0
 current_dish_index = 0
 category_id = None
-completed_orders = {}
-user_addresses = {}
 user_orders_fb = {}
 b_fb = False # для обработчика текстовых, что бы понимать что пришел отзыв
 fb_num = -1  # номер заказа для отзыва в текстовом обработчике
@@ -330,7 +328,7 @@ def process_feedback(chat_id, user_id): # Всё для отзыва
     buttons = [] # список кнопок
     row_butt = [] # список списков кнопок
 
-    user_orders_fb = get_user_orders_fb(user_id)
+    user_orders_fb = get_user_orders(user_id)
 
     if not user_orders_fb:
         inline_keyboard = InlineKeyboardMarkup()
