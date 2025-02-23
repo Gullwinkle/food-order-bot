@@ -10,12 +10,8 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
 
+user_states = {}
 restaurants = get_restaurants()
-dishes = {}
-
-current_index = 0
-current_dish_index = 0
-category_id = None
 user_orders_fb = {}
 b_fb = False # для обработчика текстовых, что бы понимать что пришел отзыв
 fb_num = -1  # номер заказа для отзыва в текстовом обработчике
@@ -74,44 +70,51 @@ def echo_all(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_inline_buttons(call):
-    global current_index, current_dish_index, dishes, category_id
+    chat_id = call.message.chat.id
     bot.delete_message(call.message.chat.id, call.message.message_id)
+    if chat_id not in user_states:
+        user_states[chat_id] = {"restaurant_index": 0, "dish_index": 0, "category_id": None, "dishes": [],
+                                "dishes_len": 0, "waiting_for": None}
 
     if call.data.startswith("category"):
         category_id = int(call.data.split("|")[1])
-        current_dish_index = 0
-        dishes = get_dishes(category_id)
-        send_category_info(call.message.chat.id)
+        user_states[chat_id]["category_id"] = category_id
+        user_states[chat_id]["dish_index"] = 0
+        user_states[chat_id]["dishes"] = get_dishes(category_id)
+        user_states[chat_id]["dishes_len"] = len(user_states[chat_id]["dishes"])
+        send_category_info(chat_id)
 
     elif call.data.isdigit(): # отзыв на заказ
         print(f'Отзыв на заказ {call.data}')
-        ask_feedback(call.message.chat.id, call.from_user.id, call.data)
+        ask_feedback(chat_id, call.from_user.id, call.data)
 
     elif call.data == "choose_restaurant":
-        current_index = 0
-        send_restaurant_info(call.message.chat.id)
+        user_states[chat_id]["restaurant_index"] = 0
+        send_restaurant_info(chat_id)
 
     elif call.data == "prev_restaurant":
-        current_index = (current_index - 1) % len(restaurants)
+        user_states[chat_id]["restaurant_index"] = (user_states[chat_id]["restaurant_index"] - 1) % len(restaurants)
         send_restaurant_info(call.message.chat.id)
 
     elif call.data == "next_restaurant":
-        current_index = (current_index + 1) % len(restaurants)
+        user_states[chat_id]["restaurant_index"] = (user_states[chat_id]["restaurant_index"] + 1) % len(restaurants)
         send_restaurant_info(call.message.chat.id)
 
     elif call.data == "select_restaurant":
         send_menu(call.message.chat.id)
 
     elif call.data == "prev_dish":
-        current_dish_index = (current_dish_index - 1) % len(dishes)
+        user_states[chat_id]["dish_index"] = (user_states[chat_id]["dish_index"] - 1) % user_states[chat_id]["dishes_len"]
         send_category_info(call.message.chat.id)
 
     elif call.data == "next_dish":
-        current_dish_index = (current_dish_index + 1) % len(dishes)
+        user_states[chat_id]["dish_index"] = (user_states[chat_id]["dish_index"] + 1) % user_states[chat_id]["dishes_len"]
         send_category_info(call.message.chat.id)
 
     elif call.data == "add_dish":
-        add_to_cart(call.from_user.id, dishes[current_dish_index]["id"], dishes[current_dish_index]["price"], restaurants[current_index]["id"])
+        add_to_cart(call.from_user.id, user_states[chat_id]["dishes"][user_states[chat_id]["dish_index"]]["id"],
+                    user_states[chat_id]["dishes"][user_states[chat_id]["dish_index"]]["price"],
+                    restaurants[user_states[chat_id]["restaurant_index"]]["id"])
         send_category_info(call.message.chat.id)
 
     elif call.data == "cart":
@@ -169,23 +172,17 @@ def send_restaurant_info(chat_id):
     inline_keyboard.row(btn_prev, btn_next)
     inline_keyboard.row(btn_select)
     inline_keyboard.row(btn_back)
-    ratings = get_rest_fb(restaurants[current_index]["id"])
+    ratings = get_rest_fb(restaurants[user_states[chat_id]['restaurant_index']]["id"])
     avg_rating = ratings[0]
     rating_count = ratings[1]
-    text = f"Ресторан: {restaurants[current_index]['name']}\n" \
-           f"Описание: {restaurants[current_index]['description']}\n" \
+    text = f"Ресторан: {restaurants[user_states[chat_id]['restaurant_index']]['name']}\n" \
+           f"Описание: {restaurants[user_states[chat_id]['restaurant_index']]['description']}\n" \
            f"Рейтинг: {avg_rating}  Отзывов: {rating_count}\n"
-#    image_path = restaurants[current_index]["logo"]
-#    try:
-#        with open(image_path, "rb") as image_file:
-#            image_data = image_file.read()
-    bot.send_photo(chat_id, photo=open(restaurants[current_index]["logo"], "rb"), caption=text,
+    bot.send_photo(chat_id, photo=open(restaurants[user_states[chat_id]['restaurant_index']]["logo"], "rb"), caption=text,
                        reply_markup=inline_keyboard)
-#    except Exception as ep:
-#        print(f"Произошла ошибка: {ep}")
 
 def send_menu(chat_id):
-    restaurant = restaurants[current_index]["id"]
+    restaurant = restaurants[user_states[chat_id]["restaurant_index"]]["id"]
     categories = get_categories(restaurant)
     inline_keyboard = InlineKeyboardMarkup()
     for button in categories:
@@ -193,13 +190,9 @@ def send_menu(chat_id):
     btn_back = InlineKeyboardButton("Назад", callback_data="choose_restaurant")
     inline_keyboard.row(btn_back)
 
-    image_path = restaurants[current_index]["logo"]
-    try:
-        with open(image_path, "rb") as image_file:
-            image_data = image_file.read()
-        bot.send_photo(chat_id, photo=image_data, caption=restaurants[current_index]["name"], reply_markup=inline_keyboard)
-    except Exception as ep:
-        print(f"Произошла ошибка: {ep}")
+    bot.send_photo(chat_id, photo=open(restaurants[user_states[chat_id]['restaurant_index']]["logo"], "rb"),
+                   caption="Выберите категорию:",
+                   reply_markup=inline_keyboard)
 
 
 def send_category_info(chat_id):
@@ -209,19 +202,19 @@ def send_category_info(chat_id):
     btn_add = InlineKeyboardButton("Добавить в заказ", callback_data="add_dish")
     btn_cart = InlineKeyboardButton("Корзина", callback_data="cart")
     btn_back = InlineKeyboardButton("Назад", callback_data="select_restaurant")
-    text = (f"{dishes[current_dish_index]['name']} - {dishes[current_dish_index]['price']} руб.\n"
-            f" {dishes[current_dish_index]['description']}")
+    text = (f"{user_states[chat_id]['dishes'][user_states[chat_id]['dish_index']]['name']} - {user_states[chat_id]['dishes'][user_states[chat_id]['dish_index']]['price']} руб.\n"
+            f" {user_states[chat_id]['dishes'][user_states[chat_id]['dish_index']]['description']}")
     inline_keyboard.row(btn_prev, btn_next)
     inline_keyboard.row(btn_add)
     inline_keyboard.row(btn_cart, btn_back)
-    bot.send_photo(chat_id, photo=open(dishes[current_dish_index]["image"], "rb"), caption=text,
+    bot.send_photo(chat_id, photo=open(user_states[chat_id]['dishes'][user_states[chat_id]['dish_index']]["image"], "rb"), caption=text,
                    reply_markup=inline_keyboard)
 
 def send_cart(chat_id):
     order = get_cart(chat_id)
     if not order:
         inline_keyboard = InlineKeyboardMarkup()
-        btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(category_id))
+        btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(user_states[chat_id]['category_id']))
         inline_keyboard.row(btn_back)
         bot.send_message(chat_id, "Ваша корзина пуста.", reply_markup=inline_keyboard)
         return
@@ -233,7 +226,7 @@ def send_cart(chat_id):
     inline_keyboard = InlineKeyboardMarkup()
     btn_confirm = InlineKeyboardButton("Подтвердить заказ", callback_data="confirm_order")
     btn_cancel = InlineKeyboardButton("Отменить заказ", callback_data="cancel_order")
-    btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(category_id))
+    btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(user_states[chat_id]['category_id']))
     inline_keyboard.row(btn_confirm)
     inline_keyboard.row(btn_cancel)
     inline_keyboard.row(btn_back)

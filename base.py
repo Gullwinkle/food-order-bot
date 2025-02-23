@@ -12,7 +12,7 @@ def add_user(telegram_id, username, first_name, last_name):
 def add_user_address(user_id, address):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET adress = ? WHERE telegram_id = ?", (address, user_id))
+    cursor.execute("UPDATE users SET user_address = ? WHERE telegram_id = ?", (address, user_id))
     conn.commit()
     conn.close()
 
@@ -20,7 +20,7 @@ def add_user_address(user_id, address):
 def get_user_address(user_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT adress FROM users WHERE telegram_id = ?",(user_id,))
+    cursor.execute("SELECT user_address FROM users WHERE telegram_id = ?",(user_id,))
     result = cursor.fetchall()
     conn.close()
     print(f'Результат: {result}')
@@ -68,7 +68,7 @@ def add_to_cart(user_id, dish_id, price, restaurant_id):
     else:
         order_id = order[0]
 
-    cursor.execute("SELECT id, quantity FROM order_items WHERE order_id = ? AND dish_id = ?", (order_id, dish_id))
+    cursor.execute("SELECT quantity FROM order_items WHERE order_id = ? AND dish_id = ?", (order_id, dish_id))
     item = cursor.fetchone()
 
     if item is None:
@@ -77,10 +77,10 @@ def add_to_cart(user_id, dish_id, price, restaurant_id):
             (order_id, dish_id, price, price))
         cursor.execute("UPDATE orders SET total_cost = total_cost + ? WHERE id = ?", (price, order_id))
     else:
-        new_quantity = item[1] + 1
+        new_quantity = item[0] + 1
         new_total = new_quantity * price
-        cursor.execute("UPDATE order_items SET quantity = ?, total = ? WHERE id = ?",
-                       (new_quantity, new_total, item[0]))
+        cursor.execute("UPDATE order_items SET quantity = ?, total = ? WHERE order_id = ? AND dish_id = ?",
+                       (new_quantity, new_total, order_id, dish_id))
         cursor.execute("UPDATE orders SET total_cost = total_cost + ? WHERE id = ?", (price, order_id))
 
     conn.commit()
