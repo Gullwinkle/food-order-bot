@@ -26,8 +26,6 @@ b_rate = False # для понимания, что в текстовом обр�
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    print(f'"/start" {message.chat.id}, {message.from_user.id}, {message.from_user.username}')
-
     add_user(message.chat.id, message.from_user.username, message.from_user.first_name, message.from_user.last_name)
     username = message.from_user.first_name
     text = f"Привет, {username}! Я бот, который поможет тебе заказать еду."
@@ -119,12 +117,8 @@ def handle_inline_buttons(call):
     elif call.data == "cart":
         send_cart(call.message.chat.id)
 
-    # elif call.data == "back_to_start":
-    #     send_welcome(call.message)
-
     elif call.data == "back_to_start":
         send_welcome_directly(call.message.chat.id, call.from_user)
-
 
     elif call.data == "confirm_order":
         send_payment_options(call.message.chat.id)
@@ -181,14 +175,14 @@ def send_restaurant_info(chat_id):
     text = f"Ресторан: {restaurants[current_index]['name']}\n" \
            f"Описание: {restaurants[current_index]['description']}\n" \
            f"Рейтинг: {avg_rating}  Отзывов: {rating_count}\n"
-    image_path = restaurants[current_index]["logo"]
-    try:
-        with open(image_path, "rb") as image_file:
-            image_data = image_file.read()
-        bot.send_photo(chat_id, photo=image_data, caption=text,
+#    image_path = restaurants[current_index]["logo"]
+#    try:
+#        with open(image_path, "rb") as image_file:
+#            image_data = image_file.read()
+    bot.send_photo(chat_id, photo=open(restaurants[current_index]["logo"], "rb"), caption=text,
                        reply_markup=inline_keyboard)
-    except Exception as ep:
-        print(f"Произошла ошибка: {ep}")
+#    except Exception as ep:
+#        print(f"Произошла ошибка: {ep}")
 
 def send_menu(chat_id):
     restaurant = restaurants[current_index]["id"]
@@ -215,10 +209,13 @@ def send_category_info(chat_id):
     btn_add = InlineKeyboardButton("Добавить в заказ", callback_data="add_dish")
     btn_cart = InlineKeyboardButton("Корзина", callback_data="cart")
     btn_back = InlineKeyboardButton("Назад", callback_data="select_restaurant")
+    text = (f"{dishes[current_dish_index]['name']} - {dishes[current_dish_index]['price']} руб.\n"
+            f" {dishes[current_dish_index]['description']}")
     inline_keyboard.row(btn_prev, btn_next)
     inline_keyboard.row(btn_add)
     inline_keyboard.row(btn_cart, btn_back)
-    bot.send_message(chat_id, f"{dishes[current_dish_index]['name']} - {dishes[current_dish_index]['price']} руб.\n {dishes[current_dish_index]['description']}", reply_markup=inline_keyboard)
+    bot.send_photo(chat_id, photo=open(dishes[current_dish_index]["image"], "rb"), caption=text,
+                   reply_markup=inline_keyboard)
 
 def send_cart(chat_id):
     order = get_cart(chat_id)

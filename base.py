@@ -1,6 +1,6 @@
 import sqlite3
 
-db_name = 'db/food_orders.db'
+db_name = 'db/order_bot.db'
 
 def add_user(telegram_id, username, first_name, last_name):
     conn = sqlite3.connect(db_name)
@@ -48,10 +48,10 @@ def get_categories(restaurant_id):
 def get_dishes(category_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, price, description FROM dishes WHERE category_id = ?", (category_id,))
+    cursor.execute("SELECT id, name, price, description, image FROM dishes WHERE category_id = ?", (category_id,))
     result = cursor.fetchall()
     conn.close()
-    return [{"id": row[0], "name": row[1], "price": row[2], "description": row[3]} for row in result]
+    return [{"id": row[0], "name": row[1], "price": row[2], "description": row[3], "image": row[4]} for row in result]
 
 
 def add_to_cart(user_id, dish_id, price, restaurant_id):
@@ -147,7 +147,7 @@ def add_fb(telegram_id, data_fb, fb_t, fb_r):
     print(data_fb)
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO reviews (user_id, restaurant_id, order_id, comment, rating) VALUES (?, ?, ?, ?, ?)",
+    cursor.execute("INSERT INTO restaurant_reviews (user_id, restaurant_id, order_id, comment, rating) VALUES (?, ?, ?, ?, ?)",
                     (telegram_id, data_fb['restaurant_id'], data_fb['id'], fb_t, fb_r))
     conn.commit()
     conn.close()
@@ -155,7 +155,7 @@ def add_fb(telegram_id, data_fb, fb_t, fb_r):
 def get_rest_fb(restaurant_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT AVG(rating), COUNT(rating) FROM reviews WHERE restaurant_id = ?", (restaurant_id,))
+    cursor.execute("SELECT AVG(rating), COUNT(rating) FROM restaurant_reviews WHERE restaurant_id = ?", (restaurant_id,))
     result = cursor.fetchone()
     conn.close()
     return result
