@@ -114,12 +114,29 @@ def change_order_payment_method(order_id, payment_method):
     conn.close()
 
 
-def get_user_orders(user_id):
+def get_user_orders(user_id, ordering='ASC', limit=None):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, user_id, restaurant_id, status, total_cost, payment_method, "
-                   "DATE(order_date) AS updated_at FROM orders WHERE user_id = ? "
-                   "AND status != 'completed'", (user_id,))
+    # Проверяем, что ordering имеет допустимое значение
+    if ordering.upper() not in ('ASC', 'DESC'):
+        ordering = 'ASC'  # Значение по умолчанию
+
+    # Формируем SQL-запрос с безопасным добавлением сортировки
+    query = f"""
+        SELECT id, user_id, restaurant_id, status, total_cost, payment_method, 
+               DATE(order_date) AS updated_at 
+        FROM orders 
+        WHERE user_id = ? AND status != 'new'
+        ORDER BY id {ordering}
+    """
+
+    # Добавляем LIMIT, если указано значение
+    params = [user_id]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+
+    cursor.execute(query, params)
     result = cursor.fetchall()
     conn.close()
     return [{"id": row[0],
@@ -151,6 +168,22 @@ def add_fb(telegram_id, data_fb, fb_t, fb_r):
                     (telegram_id, data_fb['restaurant_id'], data_fb['id'], fb_t, fb_r))
     conn.commit()
     conn.close()
+
+def add_rest_rating(user_id, restaurant_id, order_id, rating, created_at="NOW"):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO restaurant_reviews (user_id, restaurant_id, order_id, rating, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, restaurant_id, order_id, rating, created_at))
+    conn.commit()
+    conn.close()
+
+def get_rest_id(order_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT restaurant_id FROM orders WHERE id = ?", (order_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0]
 
 def get_rest_fb(restaurant_id):
     conn = sqlite3.connect(db_name)
