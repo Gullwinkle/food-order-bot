@@ -148,7 +148,16 @@ def get_user_orders(user_id, ordering='ASC', limit=None):
              "updated_at": row[6]}
             for row in result]
 
-
+def get_user_unrated_orders(user_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT orders.id, name, status, total_cost, DATE(order_date) as updated_at"
+                   " FROM orders JOIN restaurants ON orders.restaurant_id = restaurants.id "
+                   "WHERE user_id = ? AND status = 'paid'"
+                   " ORDER BY updated_at DESC LIMIT 6", (user_id,))
+    result = cursor.fetchall()
+    conn.close()
+    return [{"id": row[0], "name": row[1], "status": row[2], "total_cost": row[3], "updated_at": row[4]} for row in result]
 
 def get_current_order_id(user_id):
     conn = sqlite3.connect(db_name)
@@ -169,11 +178,12 @@ def add_fb(telegram_id, data_fb, fb_t, fb_r):
     conn.commit()
     conn.close()
 
-def add_rest_rating(user_id, restaurant_id, order_id, rating, created_at="NOW"):
+def add_rest_rating(user_id, restaurant_id, order_id, rating):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO restaurant_reviews (user_id, restaurant_id, order_id, rating, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (user_id, restaurant_id, order_id, rating, created_at))
+    cursor.execute("INSERT INTO restaurant_reviews (user_id, restaurant_id, order_id, rating) VALUES (?, ?, ?, ?)",
+                    (user_id, restaurant_id, order_id, rating))
+    cursor.execute("UPDATE orders SET status = 'rated' WHERE id = ?", (order_id,))
     conn.commit()
     conn.close()
 

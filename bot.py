@@ -327,11 +327,11 @@ def send_user_orders(chat_id, user_id): # История заказов
 
 
 def rest_feedback(chat_id, user_id): # Всё для отзыва
-    user_orders = get_user_orders(user_id, 'DESC', 6)
+    user_orders = get_user_unrated_orders(user_id)
 
     text = "Ваши заказы, на которые можно оставить отзыв:\n"
     for order in user_orders:
-        text += f"{order['id']}. заказ от {order['updated_at']} - {order['status']} - {order['total_cost']} руб. - {order['payment_method']}\n"
+        text += f"{order['id']}. заказ от {order['updated_at']} из {order['name']} {order['status']} - {order['total_cost']} руб.\n"
 
     inline_keyboard = InlineKeyboardMarkup()
     for button in user_orders:
