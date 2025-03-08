@@ -113,38 +113,15 @@ def change_order_payment_method(order_id, payment_method):
     conn.close()
 
 
-def get_user_orders(user_id, ordering='ASC', limit=None):
+def get_user_orders(user_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    # Проверяем, что ordering имеет допустимое значение
-    if ordering.upper() not in ('ASC', 'DESC'):
-        ordering = 'ASC'  # Значение по умолчанию
-
-    # Формируем SQL-запрос с безопасным добавлением сортировки
-    query = f"""
-        SELECT id, user_id, restaurant_id, status, total_cost, payment_method, 
-               DATE(order_date) AS updated_at 
-        FROM orders 
-        WHERE user_id = ? AND status != 'new'
-        ORDER BY id {ordering}
-    """
-
-    # Добавляем LIMIT, если указано значение
-    params = [user_id]
-    if limit is not None:
-        query += " LIMIT ?"
-        params.append(limit)
-
-    cursor.execute(query, params)
+    cursor.execute("SELECT id, status, total_cost, payment_method, DATE(order_date) AS updated_at "
+                   "FROM orders WHERE user_id = ? AND status != 'new'", (user_id,))
+    
     result = cursor.fetchall()
     conn.close()
-    return [{"id": row[0],
-             "user_id": row[1],
-             "restaurant_id": row[2],
-             "status": row[3],
-             "total_cost": row[4],
-             "payment_method": row[5],
-             "updated_at": row[6]}
+    return [{"id": row[0], "status": row[1], "total_cost": row[2], "payment_method": row[3], "updated_at": row[4]}
             for row in result]
 
 def get_user_unrated_orders(user_id):
