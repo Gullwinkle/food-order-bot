@@ -48,6 +48,17 @@ def handle_address(message):
     user_states[message.chat.id]["del_message_id"] = None
     user_states[message.chat.id]["waiting_for"] = None
 
+@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get("waiting_for") == "rest_feedback")
+def handle_rest_feedback(message):
+    # Получаем отзыв пользователя
+    user_feedback = message.text
+    bot.delete_message(message.chat.id, user_states[message.chat.id]["del_message_id"])
+    bot.delete_message(message.chat.id, message.message_id)
+    add_rest_comment(message.chat.id, user_feedback)
+    send_user_profile(message.chat.id, message.from_user.id)
+    user_states[message.chat.id]["del_message_id"] = None
+    user_states[message.chat.id]["waiting_for"] = None
+
 # Обработчик текстовых сообщений без каких-либо действий с БД, возвращаем на старт
 # @bot.message_handler(func=lambda message: True)
 # def echo_all(message):
@@ -106,6 +117,7 @@ def handle_inline_buttons(call):
         restaurant_id = get_rest_id(order_id)
         add_rest_rating(call.from_user.id, restaurant_id, order_id, rating)
         ask_feedback(chat_id, order_id)
+
 
 
     elif call.data.isdigit(): # отзыв на заказ
@@ -188,7 +200,7 @@ def send_restaurant_info(chat_id):
     rating_count = ratings[1]
     text = f"Ресторан: {restaurants[user_states[chat_id]['restaurant_index']]['name']}\n" \
            f"Описание: {restaurants[user_states[chat_id]['restaurant_index']]['description']}\n" \
-           f"Рейтинг: {avg_rating}  Отзывов: {rating_count}\n"
+           f"Рейтинг: {round(avg_rating, 2)}  Отзывов: {rating_count}\n"
     bot.send_photo(chat_id, photo=open(restaurants[user_states[chat_id]['restaurant_index']]["logo"], "rb"), caption=text,
                        reply_markup=inline_keyboard)
 
@@ -221,13 +233,14 @@ def send_category_info(chat_id):
     bot.send_photo(chat_id, photo=open(user_states[chat_id]['dishes'][user_states[chat_id]['dish_index']]["image"], "rb"), caption=text,
                    reply_markup=inline_keyboard)
 
-def send_cart(chat_id):
-    order = get_cart(chat_id)
+def send_cart(user_id):
+    order_id = get_current_order_id(user_id)
+    order = get_order_items(order_id)
     if not order:
         inline_keyboard = InlineKeyboardMarkup()
-        btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(user_states[chat_id]['category_id']))
+        btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(user_states[user_id]['category_id']))
         inline_keyboard.row(btn_back)
-        bot.send_message(chat_id, "Ваша корзина пуста.", reply_markup=inline_keyboard)
+        bot.send_message(user_id, "Ваша корзина пуста.", reply_markup=inline_keyboard)
         return
 
     text = "Ваш заказ:\n"
@@ -237,29 +250,30 @@ def send_cart(chat_id):
     inline_keyboard = InlineKeyboardMarkup()
     btn_confirm = InlineKeyboardButton("Подтвердить заказ", callback_data="confirm_order")
     btn_cancel = InlineKeyboardButton("Отменить заказ", callback_data="cancel_order")
-    btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(user_states[chat_id]['category_id']))
+    btn_back = InlineKeyboardButton("Назад", callback_data="category" + "|" + str(user_states[user_id]['category_id']))
     inline_keyboard.row(btn_confirm)
     inline_keyboard.row(btn_cancel)
     inline_keyboard.row(btn_back)
-    bot.send_message(chat_id, text, reply_markup=inline_keyboard)
+    bot.send_message(user_id, text, reply_markup=inline_keyboard)
 
 
-def send_payment_options(chat_id):
-    order = get_cart(chat_id)
+def send_payment_options(user_id):
+    order_id = get_current_order_id(user_id)
+    order = get_order_items(order_id)
     if not order[0]["dish_name"]:
-        bot.send_message(chat_id, "Ваша корзина пуста.")
+        bot.send_message(user_id, "Ваша корзина пуста.")
         return
     text = "Ваш заказ:\n"
     for dish in order:
         text += f"{dish['dish_name']} - {dish['quantity']} шт. - {dish['total']} руб.\n"
     text += f"\nСумма к оплате: {sum([dish['total'] for dish in order])} руб."
     text += "\nВыберите способ оплаты:"
-    change_order_status(chat_id, "confirmed")
+    change_order_status(user_id, "confirmed")
     inline_keyboard = InlineKeyboardMarkup()
     btn_online = InlineKeyboardButton("Оплата онлайн", callback_data="pay_online")
     btn_cash = InlineKeyboardButton("Оплата наличными", callback_data="pay_cash")
     inline_keyboard.row(btn_online, btn_cash)
-    bot.send_message(chat_id, text, reply_markup=inline_keyboard)
+    bot.send_message(user_id, text, reply_markup=inline_keyboard)
 
 
 def process_online_payment(chat_id, user_id):
@@ -298,10 +312,8 @@ def send_user_profile(chat_id, user_id):
         inline_keyboard.row(btn_add_adr)
 
     btn_orders = InlineKeyboardButton("История заказов", callback_data="order_history")
-    btn_fb = InlineKeyboardButton("Оставить отзыв", callback_data="feedback")
     btn_back = InlineKeyboardButton("Назад", callback_data="back_to_start")
     inline_keyboard.row(btn_orders)
-    inline_keyboard.row(btn_fb)
     inline_keyboard.row(btn_back)
     bot.send_message(chat_id, text, reply_markup=inline_keyboard)
 
@@ -320,7 +332,7 @@ def send_user_orders(chat_id, user_id): # История заказов
             text += f"заказ от {order['updated_at']} - {order['status']} - {order['total_cost']} руб. - {order['payment_method']}\n"
         inline_keyboard = InlineKeyboardMarkup()
         btn_profile = InlineKeyboardButton("Назад", callback_data="profile")
-        btn_feedback = InlineKeyboardButton("Оставить отзыв", callback_data="rest_feedback")
+        btn_feedback = InlineKeyboardButton("Оценить заказ", callback_data="rest_feedback")
         inline_keyboard.add(btn_feedback)
         inline_keyboard.add(btn_profile)
         bot.send_message(chat_id, text, reply_markup=inline_keyboard)
@@ -328,10 +340,13 @@ def send_user_orders(chat_id, user_id): # История заказов
 
 def rest_feedback(chat_id, user_id): # Всё для отзыва
     user_orders = get_user_unrated_orders(user_id)
-
+    print(user_id, chat_id)
+    user_states[chat_id]["waiting_for"] = None
+    user_states[chat_id]["del_message_id"] = None
+    print(user_states[chat_id]["waiting_for"])
     text = "Ваши заказы, на которые можно оставить отзыв:\n"
     for order in user_orders:
-        text += f"{order['id']}. заказ от {order['updated_at']} из {order['name']} {order['status']} - {order['total_cost']} руб.\n"
+        text += f"{order['id']}. заказ от {order['updated_at']} из {order['name']} - {order['total_cost']} руб.\n"
 
     inline_keyboard = InlineKeyboardMarkup()
     for button in user_orders:
@@ -346,26 +361,31 @@ def rest_feedback(chat_id, user_id): # Всё для отзыва
 
 def rate_rest(chat_id, user_id, order_id): # Отзыв получаем и отправляем БД
     inline_keyboard = InlineKeyboardMarkup()
-    btn_1 = InlineKeyboardButton("1", callback_data="feedback" + "|" + str(order_id) + "|" + "1")
-    btn_2 = InlineKeyboardButton("2", callback_data="feedback" + "|" + str(order_id) + "|" + "2")
-    btn_3 = InlineKeyboardButton("3", callback_data="feedback" + "|" + str(order_id) + "|" + "3")
-    btn_4 = InlineKeyboardButton("4", callback_data="feedback" + "|" + str(order_id) + "|" + "4")
-    btn_5 = InlineKeyboardButton("5", callback_data="feedback" + "|" + str(order_id) + "|" + "5")
+    btn_1 = InlineKeyboardButton("1⭐️", callback_data="feedback" + "|" + str(order_id) + "|" + "1")
+    btn_2 = InlineKeyboardButton("2⭐️", callback_data="feedback" + "|" + str(order_id) + "|" + "2")
+    btn_3 = InlineKeyboardButton("3⭐️", callback_data="feedback" + "|" + str(order_id) + "|" + "3")
+    btn_4 = InlineKeyboardButton("4⭐️", callback_data="feedback" + "|" + str(order_id) + "|" + "4")
+    btn_5 = InlineKeyboardButton("5⭐️", callback_data="feedback" + "|" + str(order_id) + "|" + "5")
     btn_profile = InlineKeyboardButton("Назад", callback_data="rest_feedback")
-    btn_feedback = InlineKeyboardButton("Оценить заказ", callback_data="rest_feedback")
+    btn_feedback = InlineKeyboardButton("Оценить другой заказ", callback_data="rest_feedback")
     inline_keyboard.row(btn_1, btn_2, btn_3, btn_4, btn_5)
     inline_keyboard.row(btn_feedback)
     inline_keyboard.row(btn_profile)
-    bot.send_message(chat_id, "Оцените заказ:", reply_markup=inline_keyboard)
+    text = f'Оцените ваш заказ из {get_rest_name(order_id)[0]}: \n'
+    order = get_order_items(order_id)
+    for dish in order:
+        text += f"{dish['dish_name']} - {dish['quantity']} шт. - {dish['total']} руб.\n"
+    bot.send_message(chat_id, text, reply_markup=inline_keyboard)
 
 
 def ask_feedback(chat_id, order_id):
     inline_keyboard = InlineKeyboardMarkup()
-    btn_feedback = InlineKeyboardButton("Оставить отзыв", callback_data="rest_feedback")
+    user_states[chat_id]["waiting_for"] = "rest_feedback"
+    print(user_states[chat_id]["waiting_for"])
     btn_back = InlineKeyboardButton("Назад", callback_data="rest_feedback")
-    inline_keyboard.add(btn_feedback)
     inline_keyboard.add(btn_back)
-    bot.send_message(chat_id, "Спасибо за оценку", reply_markup=inline_keyboard)
+    msg = bot.send_message(chat_id, "Спасибо за оценку! Вы можете оставить отзыв, отправив сообщение:", reply_markup=inline_keyboard)
+    user_states[chat_id]["del_message_id"] = msg.message_id
 
 def cancel_order(chat_id, user_id):
     change_order_status(user_id, "canceled")

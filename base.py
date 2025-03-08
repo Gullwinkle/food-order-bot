@@ -87,12 +87,12 @@ def add_to_cart(user_id, dish_id, price, restaurant_id):
     conn.close()
 
 
-def get_cart(user_id):
+def get_order_items(order_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute("SELECT dishes.name AS dish_name, quantity, total FROM order_items "
                    "INNER JOIN dishes ON order_items.dish_id = dishes.id "
-                   "WHERE order_id IN (SELECT id FROM orders WHERE user_id = ? AND status = 'new')", (user_id,))
+                   "WHERE order_id = ?", (order_id,))
     result = cursor.fetchall()
     conn.close()
     return [{"dish_name": row[0], "quantity": row[1], "total": row[2]} for row in result]
@@ -162,7 +162,7 @@ def get_user_unrated_orders(user_id):
 def get_current_order_id(user_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM orders WHERE user_id = ? AND status = 'confirmed'", (user_id,))
+    cursor.execute("SELECT id FROM orders WHERE user_id = ? ORDER BY id DESC", (user_id,))
     result = cursor.fetchone()
     conn.close()
     return result[0]
@@ -187,6 +187,13 @@ def add_rest_rating(user_id, restaurant_id, order_id, rating):
     conn.commit()
     conn.close()
 
+def add_rest_comment(user_id, comment):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE restaurant_reviews SET comment = ? WHERE id = (SELECT MAX(id) FROM restaurant_reviews WHERE user_id = ?)", (comment, user_id))
+    conn.commit()
+    conn.close()
+
 def get_rest_id(order_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
@@ -207,6 +214,14 @@ def get_username(telegram_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute("SELECT first_name FROM users WHERE telegram_id = ?", (telegram_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def get_rest_name(order_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM restaurants WHERE id = (SELECT restaurant_id FROM orders WHERE id = ?)", (order_id,))
     result = cursor.fetchone()
     conn.close()
     return result
