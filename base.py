@@ -12,7 +12,7 @@ def add_user(telegram_id, username, first_name, last_name):
 def add_user_address(user_id, address):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET adress = ? WHERE telegram_id = ?", (address, user_id))
+    cursor.execute("UPDATE users SET user_address = ? WHERE telegram_id = ?", (address, user_id))
     conn.commit()
     conn.close()
 
@@ -20,10 +20,9 @@ def add_user_address(user_id, address):
 def get_user_address(user_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT adress FROM users WHERE telegram_id = ?",(user_id,))
+    cursor.execute("SELECT user_address FROM users WHERE telegram_id = ?",(user_id,))
     result = cursor.fetchall()
     conn.close()
-    print(f'Результат: {result}')
     return result
 
 
@@ -68,7 +67,7 @@ def add_to_cart(user_id, dish_id, price, restaurant_id):
     else:
         order_id = order[0]
 
-    cursor.execute("SELECT id, quantity FROM order_items WHERE order_id = ? AND dish_id = ?", (order_id, dish_id))
+    cursor.execute("SELECT quantity FROM order_items WHERE order_id = ? AND dish_id = ?", (order_id, dish_id))
     item = cursor.fetchone()
 
     if item is None:
@@ -77,22 +76,22 @@ def add_to_cart(user_id, dish_id, price, restaurant_id):
             (order_id, dish_id, price, price))
         cursor.execute("UPDATE orders SET total_cost = total_cost + ? WHERE id = ?", (price, order_id))
     else:
-        new_quantity = item[1] + 1
+        new_quantity = item[0] + 1
         new_total = new_quantity * price
-        cursor.execute("UPDATE order_items SET quantity = ?, total = ? WHERE id = ?",
-                       (new_quantity, new_total, item[0]))
+        cursor.execute("UPDATE order_items SET quantity = ?, total = ? WHERE order_id = ? AND dish_id = ?",
+                       (new_quantity, new_total, order_id, dish_id))
         cursor.execute("UPDATE orders SET total_cost = total_cost + ? WHERE id = ?", (price, order_id))
 
     conn.commit()
     conn.close()
 
 
-def get_cart(user_id):
+def get_order_items(order_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute("SELECT dishes.name AS dish_name, quantity, total FROM order_items "
                    "INNER JOIN dishes ON order_items.dish_id = dishes.id "
-                   "WHERE order_id IN (SELECT id FROM orders WHERE user_id = ? AND status = 'new')", (user_id,))
+                   "WHERE order_id = ?", (order_id,))
     result = cursor.fetchall()
     conn.close()
     return [{"dish_name": row[0], "quantity": row[1], "total": row[2]} for row in result]
@@ -114,12 +113,29 @@ def change_order_payment_method(order_id, payment_method):
     conn.close()
 
 
-def get_user_orders(user_id):
+def get_user_orders(user_id, ordering='ASC', limit=None):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, user_id, restaurant_id, status, total_cost, payment_method, "
-                   "DATE(order_date) AS updated_at FROM orders WHERE user_id = ? "
-                   "AND status != 'completed'", (user_id,))
+    # Проверяем, что ordering имеет допустимое значение
+    if ordering.upper() not in ('ASC', 'DESC'):
+        ordering = 'ASC'  # Значение по умолчанию
+
+    # Формируем SQL-запрос с безопасным добавлением сортировки
+    query = f"""
+        SELECT id, user_id, restaurant_id, status, total_cost, payment_method, 
+               DATE(order_date) AS updated_at 
+        FROM orders 
+        WHERE user_id = ? AND status != 'new'
+        ORDER BY id {ordering}
+    """
+
+    # Добавляем LIMIT, если указано значение
+    params = [user_id]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+
+    cursor.execute(query, params)
     result = cursor.fetchall()
     conn.close()
     return [{"id": row[0],
@@ -131,26 +147,48 @@ def get_user_orders(user_id):
              "updated_at": row[6]}
             for row in result]
 
-
+def get_user_unrated_orders(user_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT orders.id, name, status, total_cost, DATE(order_date) as updated_at"
+                   " FROM orders JOIN restaurants ON orders.restaurant_id = restaurants.id "
+                   "WHERE user_id = ? AND status = 'paid'"
+                   " ORDER BY updated_at DESC LIMIT 6", (user_id,))
+    result = cursor.fetchall()
+    conn.close()
+    return [{"id": row[0], "name": row[1], "status": row[2], "total_cost": row[3], "updated_at": row[4]} for row in result]
 
 def get_current_order_id(user_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM orders WHERE user_id = ? AND status = 'confirmed'", (user_id,))
+    cursor.execute("SELECT id, status FROM orders WHERE user_id = ? ORDER BY id DESC", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def add_rest_rating(user_id, restaurant_id, order_id, rating):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO restaurant_reviews (user_id, restaurant_id, order_id, rating) VALUES (?, ?, ?, ?)",
+                    (user_id, restaurant_id, order_id, rating))
+    cursor.execute("UPDATE orders SET status = 'rated' WHERE id = ?", (order_id,))
+    conn.commit()
+    conn.close()
+
+def add_rest_comment(user_id, comment):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE restaurant_reviews SET comment = ? WHERE id = (SELECT MAX(id) FROM restaurant_reviews WHERE user_id = ?)", (comment, user_id))
+    conn.commit()
+    conn.close()
+
+def get_rest_id(order_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT restaurant_id FROM orders WHERE id = ?", (order_id,))
     result = cursor.fetchone()
     conn.close()
     return result[0]
-
-
-
-def add_fb(telegram_id, data_fb, fb_t, fb_r):
-    print(data_fb)
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO restaurant_reviews (user_id, restaurant_id, order_id, comment, rating) VALUES (?, ?, ?, ?, ?)",
-                    (telegram_id, data_fb['restaurant_id'], data_fb['id'], fb_t, fb_r))
-    conn.commit()
-    conn.close()
 
 def get_rest_fb(restaurant_id):
     conn = sqlite3.connect(db_name)
@@ -164,6 +202,14 @@ def get_username(telegram_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute("SELECT first_name FROM users WHERE telegram_id = ?", (telegram_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def get_rest_name(order_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM restaurants WHERE id = (SELECT restaurant_id FROM orders WHERE id = ?)", (order_id,))
     result = cursor.fetchone()
     conn.close()
     return result
