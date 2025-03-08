@@ -23,7 +23,6 @@ def get_user_address(user_id):
     cursor.execute("SELECT user_address FROM users WHERE telegram_id = ?",(user_id,))
     result = cursor.fetchall()
     conn.close()
-    print(f'Результат: {result}')
     return result
 
 
@@ -162,21 +161,10 @@ def get_user_unrated_orders(user_id):
 def get_current_order_id(user_id):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM orders WHERE user_id = ? ORDER BY id DESC", (user_id,))
+    cursor.execute("SELECT id, status FROM orders WHERE user_id = ? ORDER BY id DESC", (user_id,))
     result = cursor.fetchone()
     conn.close()
-    return result[0]
-
-
-
-def add_fb(telegram_id, data_fb, fb_t, fb_r):
-    print(data_fb)
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO restaurant_reviews (user_id, restaurant_id, order_id, comment, rating) VALUES (?, ?, ?, ?, ?)",
-                    (telegram_id, data_fb['restaurant_id'], data_fb['id'], fb_t, fb_r))
-    conn.commit()
-    conn.close()
+    return result
 
 def add_rest_rating(user_id, restaurant_id, order_id, rating):
     conn = sqlite3.connect(db_name)
