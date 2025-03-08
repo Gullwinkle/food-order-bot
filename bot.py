@@ -9,6 +9,11 @@ load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
+bot.set_my_commands([
+    telebot.types.BotCommand("/start", "Начать работу с ботом")
+])
+
+
 user_states = {}
 restaurants = get_restaurants()
 
